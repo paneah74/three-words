@@ -254,6 +254,7 @@
 <script>
 /* Set to false for the version you give to your daughter: hides the refresh button, the testing tools and the prototype notes. */
 const PROTOTYPE_TOOLS = false;
+const APP_VERSION = '1.1';
 
 /* ---------- Sample vocabulary: [word, part of speech, level, context, Hebrew, Russian, example] ---------- */
 /* Placeholder list. n = noun, v = verb, adj = adjective. Context: day = day-to-day, lit = literature, mitam = exam prep (placeholder). */
@@ -628,7 +629,7 @@ function renderToday(){
   }).join('');
   document.getElementById('app').innerHTML =
     '<div class="head"><div><h1>Today’s words</h1><p class="date">' + prettyDate(entry.date, true) + '</p></div>' +
-    (PROTOTYPE_TOOLS ? '<button class="round sec" data-act="reopen" aria-label="Refresh: simulate reopening the app">' + refreshSvg + '</button>' : '') + '</div>' +
+    '<button class="round sec" data-act="reopen" aria-label="Reload the app">' + refreshSvg + '</button></div>' +
     (flash ? '<p class="toast" id="toast" role="status">' + flash + '</p>' : '') +
     '<div class="cards">' + cards + '</div>' +
     (entry.relaxed && PROTOTYPE_TOOLS ? '<p class="notice">Prototype note: the sample list has too few words for these exact settings, so some words come from a nearby level or context. The real list will be larger.</p>' : '') +
@@ -702,7 +703,8 @@ function renderSettings(){
       '<fieldset><legend>Context</legend><div class="choices">' +
         choice('ctx','day','Day-to-day',s.ctx) + choice('ctx','lit','Literature',s.ctx) + choice('ctx','mitam','Mitam exam preparation',s.ctx) + '</div>' +
         '<p class="hint" id="mitamNote"' + (s.ctx === 'mitam' ? '' : ' hidden') + '>Mitam words come from the seven practice exams, and words that appear in more exams come first.</p></fieldset></section>' +
-    '<p class="notice">Changes apply the next time words are generated. Words already shown stay the same.</p>';
+    '<p class="notice">Changes apply the next time words are generated. Words already shown stay the same.</p>' +
+    '<p class="notice">Version ' + APP_VERSION + '</p>';
   document.getElementById('barInner').innerHTML = '';
 }
 
@@ -847,9 +849,9 @@ document.addEventListener('click', ev => {
   else if (act === 'settings') location.hash = 'settings';
   else if (act === 'back') location.hash = 'today';
   else if (act === 'reopen') {
-    flash = startSession() ? 'App reopened: new words.' : 'App reopened: same words as before.';
-    location.hash = 'today'; route();
-    setTimeout(() => { flash = ''; const t = document.getElementById('toast'); if (t) t.remove(); }, 3000);
+    try { sessionStorage.setItem('dw_reload', '1'); } catch (e) {}
+    location.hash = '';
+    location.reload();
   }
   else if (act === 'nextday') { store.set('dw_offset', String(getOffset() + 1)); startSession(); location.hash = 'today'; route(); }
   else if (act === 'reset') {
@@ -857,7 +859,13 @@ document.addEventListener('click', ev => {
   }
 });
 
-startSession();
+const createdNow = startSession();
+let reloaded = false;
+try { reloaded = sessionStorage.getItem('dw_reload') === '1'; sessionStorage.removeItem('dw_reload'); } catch (e) {}
+if (reloaded) {
+  flash = createdNow ? 'App reloaded: new words.' : 'App reloaded: same words as before.';
+  setTimeout(() => { flash = ''; const t = document.getElementById('toast'); if (t) t.remove(); }, 3000);
+}
 route();
 </script>
 <script>
