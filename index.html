@@ -88,7 +88,7 @@
   .date { color: var(--ink-soft); font-size: 16px; margin: 0 0 20px; }
   .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
   .toast { background: var(--accent); color: var(--accent-ink); font-weight: 800; font-size: 15px; border-radius: 14px; padding: 10px 14px; margin: 0 0 14px; }
-  .cards { display: grid; gap: 14px; }
+  .cards { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
   .card { border-radius: 28px; padding: 18px 18px 16px; color: var(--card-ink); }
   .card:nth-child(3n+1) { background: var(--c1); }
   .card:nth-child(3n+2) { background: var(--c2); }
@@ -96,7 +96,7 @@
   .word-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .word {
     font-family: "Fredoka", "Nunito", system-ui, sans-serif;
-    font-weight: 600; font-size: 44px; line-height: 1.05; letter-spacing: -0.01em; word-break: break-word;
+    font-weight: 600; font-size: 44px; line-height: 1.05; letter-spacing: -0.01em; white-space: nowrap;
   }
   .meta { font-size: 14px; font-weight: 700; color: var(--card-soft); margin-top: 2px; }
   .round {
@@ -158,11 +158,13 @@
   /* Logbook */
   .day-card {
     background: var(--surface); border: 1px solid var(--line); border-radius: 24px;
-    padding: 0 18px; margin: 12px 0 0;
+    padding: 0 12px; margin: 12px 0 0;
   }
   .day-card[open] { padding-bottom: 8px; }
   .day-wrap { display: flex; gap: 8px; align-items: flex-start; margin-top: 12px; }
   .day-wrap .day-card { margin: 0; flex: 1; min-width: 0; }
+  .sum-right { display: flex; align-items: center; gap: 10px; flex: none; }
+  .day-card summary .del { min-width: 44px; height: 44px; border-radius: 14px; }
   .del {
     flex: none; min-width: 60px; height: 60px; padding: 0 12px; border-radius: 20px; border: 1px solid var(--line);
     background: var(--surface); color: var(--ink-soft); cursor: pointer; display: grid; place-items: center;
@@ -185,11 +187,19 @@
   .sum-time { font-size: 17px; font-weight: 600; color: var(--ink-soft); }
   .chev { width: 24px; height: 24px; color: var(--ink-soft); transition: transform .15s ease; flex: none; }
   .day-card[open] .chev { transform: rotate(90deg); }
-  .lrow { padding: 14px 14px 14px 16px; margin-bottom: 10px; border-radius: 22px; color: var(--card-ink); }
+  .lrow { padding: 12px 10px 12px 12px; margin-bottom: 10px; border-radius: 22px; color: var(--card-ink); }
   .lrow.c1 { background: var(--c1); }
   .lrow.c2 { background: var(--c2); }
   .lrow.c3 { background: var(--c3); }
   .lrow .word { font-size: 28px; }
+  .word-row > div:first-child { flex: 1; min-width: 0; }
+  .word.wrap { white-space: normal; }
+  .reset-btn {
+    margin-top: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: inherit; font-weight: 800;
+    font-size: 15px; border-radius: 999px; padding: 9px 16px; min-height: 40px; cursor: pointer;
+  }
+  .reset-btn:disabled { opacity: .45; cursor: default; }
+  .reset-btn.pending { background: #C62F4B; color: #FFFFFF; border-color: #C62F4B; }
   .lrow .tr { margin-top: 4px; }
   .lrow .tr div { font-size: 18px; }
   .lrow .ex-btn { margin-top: 10px; min-height: 40px; padding: 8px 16px; }
@@ -254,7 +264,7 @@
 <script>
 /* Set to false for the version you give to your daughter: hides the refresh button, the testing tools and the prototype notes. */
 const PROTOTYPE_TOOLS = false;
-const APP_VERSION = '1.1';
+const APP_VERSION = '1.2';
 
 /* ---------- Sample vocabulary: [word, part of speech, level, context, Hebrew, Russian, example] ---------- */
 /* Placeholder list. n = noun, v = verb, adj = adjective. Context: day = day-to-day, lit = literature, mitam = exam prep (placeholder). */
@@ -467,7 +477,7 @@ function saveLog(l){ store.set('dw_log', JSON.stringify(l)); }
 function getOffset(){ return parseInt(store.get('dw_offset') || '0', 10) || 0; }
 
 /* ---------- Settings ---------- */
-const DEFAULTS = {freq:'day', pos:'mix', level:'A2', ctx:'day'};
+const DEFAULTS = {freq:'day', pos:'mix', level:'A2', ctx:'day', repeat:'new'};
 function getSettings(){
   let s = {};
   try { s = JSON.parse(store.get('dw_settings') || '{}'); } catch(e){ s = {}; }
@@ -525,8 +535,12 @@ function pickWordsCore(used, s){
 
 function generateEntry(){
   const log = loadLog(), s = getSettings();
-  let used = new Set(log.flatMap(e => e.words.map(x => x.i)));
-  if (WORDS.length - used.size < 3) used = new Set();      // list finished: start over
+  let used = new Set();
+  if (s.repeat !== 'allow') {                               // Only new words: skip Logbook words since the last start-over
+    const since = store.get('dw_reset') || '';
+    used = new Set(log.filter(e => !since || (e.ts || e.date) > since).flatMap(e => e.words.map(x => x.i)));
+  }
+  if (WORDS.length - used.size < 3) used = new Set();      // all words used: start over
   const picks = pickWords(used, s);
   const now = nowShifted();
   const entry = {
@@ -660,8 +674,7 @@ function renderLogbook(){
     }).join('');
     return '<div class="day-wrap"><details class="day-card" data-id="' + esc(e.id) + '"' + (openDays.has(e.id) ? ' open' : '') + '><summary><span class="sum-main"><span>' +
       prettyDate(e.date, false) + '</span>' + (e.timed && e.ts ? '<span class="sum-time">' + prettyTime(e.ts) + '</span>' : '') +
-      '</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>' + items + '</details>' +
-      '<button class="del' + (pending === e.id ? ' pending' : '') + '" data-act="delete" data-id="' + esc(e.id) + '" aria-label="Delete this entry">' + (pending === e.id ? 'Delete?' : trashSvg) + '</button></div>';
+      '</span><span class="sum-right"><button class="del' + (pending === e.id ? ' pending' : '') + '" data-act="delete" data-id="' + esc(e.id) + '" aria-label="Delete this entry">' + (pending === e.id ? 'Delete?' : trashSvg) + '</button><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></span></summary>' + items + '</details></div>';
   }).join('');
   document.getElementById('app').innerHTML =
     '<div class="top-row"><button class="back" data-act="back">‹ Back to today</button>' +
@@ -687,13 +700,24 @@ function levelHintText(ctx){
 function choice(name, val, label, cur){
   return '<label class="choice"><input type="radio" name="' + name + '" value="' + val + '"' + (cur === val ? ' checked' : '') + '><span>' + label + '</span></label>';
 }
+function resetInfo(){
+  const r = store.get('dw_reset');
+  if (!r) return '';
+  return '<p class="hint">Started over on ' + prettyDate(dateKey(new Date(r)), false) + '. The Logbook is kept.</p>';
+}
 function renderSettings(){
   const s = getSettings();
   document.getElementById('app').innerHTML =
     '<button class="back" data-act="back">‹ Back to today</button><h1>Settings</h1>' +
     '<section class="set-card"><h2>New words</h2><fieldset><legend>How often do new words appear?</legend>' +
       '<div class="choices">' + choice('freq','day','Once a day',s.freq) + choice('freq','run','Every time the app opens',s.freq) + '</div>' +
-      '<p class="hint">With “Every time the app opens”, the Logbook shows the time next to the date.</p></fieldset></section>' +
+      '<p class="hint">With “Every time the app opens”, the Logbook shows the time next to the date.</p></fieldset>' +
+      '<fieldset><legend>Word repeats</legend><div class="choices">' +
+        choice('repeat','new','Only new words',s.repeat) + choice('repeat','allow','Allow repeats',s.repeat) + '</div>' +
+        '<p class="hint">“Only new words” skips words already in the Logbook until all words are used, then starts over.</p>' +
+        '<button class="reset-btn' + (pending === 'resetwords' ? ' pending' : '') + '" id="resetWords" data-act="resetwords"' + (s.repeat === 'allow' ? ' disabled' : '') + '>' +
+          (pending === 'resetwords' ? 'Tap again to start over' : 'Start words over') + '</button>' +
+        resetInfo() + '</fieldset></section>' +
     '<section class="set-card"><h2>Vocabulary</h2>' +
       '<fieldset><legend>Parts of speech</legend><div class="choices">' +
         choice('pos','n','Nouns',s.pos) + choice('pos','v','Verbs',s.pos) + choice('pos','adj','Adjectives',s.pos) + choice('pos','mix','Mix',s.pos) + '</div></fieldset>' +
@@ -785,10 +809,27 @@ function route(){
 }
 window.addEventListener('hashchange', route);
 
+/* ---------- Long words: shrink the font so a word stays on one line ---------- */
+function fitWords(){
+  document.querySelectorAll('#app .word').forEach(el => {
+    el.classList.remove('wrap'); el.style.fontSize = '';
+    const avail = el.clientWidth;
+    if (!avail || el.scrollWidth <= avail) return;            // hidden, or already fits
+    const base = parseFloat(getComputedStyle(el).fontSize);
+    const min = Math.max(14, Math.round(base * 0.5));
+    let size = Math.max(min, Math.floor(base * avail / el.scrollWidth));
+    el.style.fontSize = size + 'px';
+    while (el.scrollWidth > avail && size > min) { size--; el.style.fontSize = size + 'px'; }
+    if (el.scrollWidth > avail && el.textContent.indexOf(' ') !== -1) el.classList.add('wrap');   // two-word terms may wrap at the space only
+  });
+}
+new MutationObserver(() => requestAnimationFrame(fitWords)).observe(document.getElementById('app'), {childList: true});
+window.addEventListener('resize', () => requestAnimationFrame(fitWords));
+
 /* ---------- Actions ---------- */
 document.addEventListener('toggle', ev => {
   const d = ev.target;
-  if (d.matches && d.matches('details.day-card')) { d.open ? openDays.add(d.dataset.id) : openDays.delete(d.dataset.id); }
+  if (d.matches && d.matches('details.day-card')) { d.open ? openDays.add(d.dataset.id) : openDays.delete(d.dataset.id); if (d.open) requestAnimationFrame(fitWords); }
 }, true);
 
 document.addEventListener('change', ev => {
@@ -800,11 +841,14 @@ document.addEventListener('change', ev => {
   const ls = document.getElementById('levelSet'), lh = document.getElementById('levelHint');
   if (ls) ls.disabled = s.ctx === 'mitam';
   if (lh) lh.textContent = levelHintText(s.ctx);
+  const rb = document.getElementById('resetWords');
+  if (rb) rb.disabled = s.repeat === 'allow';
 });
 
 document.addEventListener('click', ev => {
   const b = ev.target.closest('[data-act]'); if (!b) return;
   const act = b.dataset.act;
+  if (act === 'delete') ev.preventDefault();      // the delete button sits in the row title: do not open or close the row
   if (act === 'audio') speak(b.dataset.text, b);
   else if (act === 'example') {
     const log = loadLog(), e = log.find(x => x.id === currentId);
@@ -845,6 +889,17 @@ document.addEventListener('click', ev => {
     renderTest();
   }
   else if (act === 'showsent') { quiz.showSent = !quiz.showSent; renderTest(); }
+  else if (act === 'resetwords') {
+    if (getSettings().repeat === 'allow') return;
+    if (pending !== 'resetwords') {
+      pending = 'resetwords'; renderSettings();
+      setTimeout(() => { if (pending === 'resetwords') { pending = null; if (location.hash === '#settings') renderSettings(); } }, 4000);
+    } else {
+      pending = null;
+      store.set('dw_reset', nowShifted().toISOString());
+      renderSettings();
+    }
+  }
   else if (act === 'logbook') location.hash = 'logbook';
   else if (act === 'settings') location.hash = 'settings';
   else if (act === 'back') location.hash = 'today';
@@ -855,7 +910,7 @@ document.addEventListener('click', ev => {
   }
   else if (act === 'nextday') { store.set('dw_offset', String(getOffset() + 1)); startSession(); location.hash = 'today'; route(); }
   else if (act === 'reset') {
-    if (confirm('Erase all words and history?')) { store.del('dw_log'); store.del('dw_offset'); startSession(); location.hash = 'today'; route(); }
+    if (confirm('Erase all words and history?')) { store.del('dw_log'); store.del('dw_offset'); store.del('dw_reset'); startSession(); location.hash = 'today'; route(); }
   }
 });
 
