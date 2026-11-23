@@ -203,11 +203,27 @@
   .lrow .tr { margin-top: 4px; }
   .lrow .tr div { font-size: 18px; }
   .lrow .ex-btn { margin-top: 10px; min-height: 40px; padding: 8px 16px; }
+  .act-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 14px; }
+  .lrow .act-row { margin-top: 10px; }
+  .act-row .ex-btn, .lrow .act-row .ex-btn { margin-top: 0; }
+  .known-btn {
+    border: 2px solid var(--card-ink); background: transparent; color: var(--card-ink); opacity: .75; cursor: pointer;
+    font: inherit; font-weight: 800; font-size: 14px; border-radius: 999px; padding: 7px 14px; min-height: 40px;
+  }
+  .known-btn.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); opacity: 1; }
+  .learn-link {
+    display: block; width: 100%; margin: 6px 0 2px; border: 2px solid var(--accent); background: var(--surface); color: var(--accent);
+    font: inherit; font-weight: 800; font-size: 17px; border-radius: 16px; padding: 12px; min-height: 48px; cursor: pointer;
+  }
+  .lrow.playing { outline: 4px solid var(--accent); outline-offset: 2px; }
+  .learn-list { margin-top: 8px; }
+  .play-lang { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 0 0 8px; }
+  .pl-label { font-weight: 800; font-size: 15px; color: var(--ink-soft); }
   .lsent { margin-top: 10px; background: var(--bubble); border-radius: 16px; padding: 10px 10px 10px 14px; display: flex; gap: 10px; align-items: center; justify-content: space-between; }
   .lsent p { margin: 0; font-size: 17px; line-height: 1.4; font-weight: 600; }
   .log-scroll {
-    max-height: calc(100vh - 190px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
-    max-height: calc(100dvh - 190px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    max-height: calc(100vh - 256px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    max-height: calc(100dvh - 256px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
     overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
     padding: 0 6px 16px 0; margin-right: -6px; scrollbar-width: thin; scrollbar-color: var(--line) transparent;
   }
@@ -264,7 +280,7 @@
 <script>
 /* Set to false for the version you give to your daughter: hides the refresh button, the testing tools and the prototype notes. */
 const PROTOTYPE_TOOLS = false;
-const APP_VERSION = '1.2';
+const APP_VERSION = '1.6';
 
 /* ---------- Sample vocabulary: [word, part of speech, level, context, Hebrew, Russian, example] ---------- */
 /* Placeholder list. n = noun, v = verb, adj = adjective. Context: day = day-to-day, lit = literature, mitam = exam prep (placeholder). */
@@ -477,7 +493,7 @@ function saveLog(l){ store.set('dw_log', JSON.stringify(l)); }
 function getOffset(){ return parseInt(store.get('dw_offset') || '0', 10) || 0; }
 
 /* ---------- Settings ---------- */
-const DEFAULTS = {freq:'day', pos:'mix', level:'A2', ctx:'day', repeat:'new'};
+const DEFAULTS = {freq:'day', pos:'mix', level:'A2', ctx:'day', repeat:'new', playLang:'he'};
 function getSettings(){
   let s = {};
   try { s = JSON.parse(store.get('dw_settings') || '{}'); } catch(e){ s = {}; }
@@ -636,10 +652,9 @@ function renderToday(){
   const entry = currentEntry();
   const cards = entry.words.map((p, idx) => {
     const x = WORDS[p.i];
-    const sentence = p.ex
-      ? sentenceBlock(x, 'bubble', 'b' + idx)
-      : '<button class="ex-btn" data-act="example" data-idx="' + idx + '">Example</button>';
-    return '<section class="card">' + wordHead(x, 'accent') + translations(x) + sentence + '</section>';
+    const exBtn = '<button class="ex-btn" data-act="example" data-idx="' + idx + '">Example</button>';
+    return '<section class="card">' + wordHead(x, 'accent') + translations(x) +
+      actRow(p.i, p.ex ? '' : exBtn) + (p.ex ? sentenceBlock(x, 'bubble', 'b' + idx) : '') + '</section>';
   }).join('');
   document.getElementById('app').innerHTML =
     '<div class="head"><div><h1>Today’s words</h1><p class="date">' + prettyDate(entry.date, true) + '</p></div>' +
@@ -668,9 +683,9 @@ function renderLogbook(){
   const days = log.map(e => {
     const items = e.words.map((p, idx) => {
       const x = WORDS[p.i];
-      return '<div class="lrow c' + (idx % 3 + 1) + '">' + wordHead(x, 'small accent') + translations(x) + (p.ex
-        ? sentenceBlock(x, 'lsent', '')
-        : '<button class="ex-btn" data-act="logexample" data-id="' + esc(e.id) + '" data-idx="' + idx + '">Example</button>') + '</div>';
+      const exBtn = '<button class="ex-btn" data-act="logexample" data-id="' + esc(e.id) + '" data-idx="' + idx + '">Example</button>';
+      return '<div class="lrow c' + (idx % 3 + 1) + '">' + wordHead(x, 'small accent') + translations(x) +
+        actRow(p.i, p.ex ? '' : exBtn) + (p.ex ? sentenceBlock(x, 'lsent', '') : '') + '</div>';
     }).join('');
     return '<div class="day-wrap"><details class="day-card" data-id="' + esc(e.id) + '"' + (openDays.has(e.id) ? ' open' : '') + '><summary><span class="sum-main"><span>' +
       prettyDate(e.date, false) + '</span>' + (e.timed && e.ts ? '<span class="sum-time">' + prettyTime(e.ts) + '</span>' : '') +
@@ -680,6 +695,7 @@ function renderLogbook(){
     '<div class="top-row"><button class="back" data-act="back">‹ Back to today</button>' +
       (log.length ? '<button class="del-all' + (pending === 'all' ? ' pending' : '') + '" data-act="deleteall">' + (pending === 'all' ? 'Tap again to delete all' : 'Delete all') + '</button>' : '') +
     '</div><h1>Logbook</h1>' +
+    '<button class="learn-link" data-act="learn">Words to learn (' + learnList().length + ')</button>' +
     '<div class="log-scroll" id="logScroll" tabindex="0" aria-label="Days in the logbook">' +
     (days || '<p class="empty">No words yet. Open today’s words to start your logbook.</p>') + '</div>';
   document.getElementById('barInner').innerHTML = '';
@@ -730,6 +746,144 @@ function renderSettings(){
     '<p class="notice">Changes apply the next time words are generated. Words already shown stay the same.</p>' +
     '<p class="notice">Version ' + APP_VERSION + '</p>';
   document.getElementById('barInner').innerHTML = '';
+}
+
+/* ---------- Unknown words and the "Words to learn" list ---------- */
+/* Words marked Unknown, in the order they were marked. Only these words are in "Words to learn". */
+function getUnknown(){ try { const a = JSON.parse(store.get('dw_unknown') || '[]'); return Array.isArray(a) ? a.filter(i => WORDS[i]) : []; } catch (e) { return []; } }
+function saveUnknown(arr){ store.set('dw_unknown', JSON.stringify(arr)); }
+function unknownBtn(i){
+  const on = getUnknown().includes(i);
+  return '<button class="known-btn' + (on ? ' on' : '') + '" data-act="unknown" data-i="' + i + '" aria-pressed="' + on + '">' + (on ? '✓ Unknown' : 'Unknown') + '</button>';
+}
+function actRow(i, before){ return '<div class="act-row">' + (before || '') + unknownBtn(i) + '</div>'; }
+/* Words to learn: the words marked Unknown, most recently marked first. */
+function learnList(){ return getUnknown().slice().reverse(); }
+
+/* ---------- Speaking in sequence (Play) ---------- */
+function pickHeVoice(){ return voices.find(v => /^(he|iw)/i.test(v.lang)) || null; }
+function pickRuVoice(){ return voices.find(v => /^ru/i.test(v.lang)) || null; }
+function heSpeakText(x){
+  const t = x.he.split(';')[0].replace(/\([^)]*\)/g, '').replace(/[A-Za-z]+/g, '').replace(/\s+,/g, ',').replace(/\s{2,}/g, ' ').trim();
+  return t || x.he;
+}
+function ruSpeakText(x){
+  const t = x.ru.split(';')[0].replace(/\([^)]*\)/g, '').replace(/[A-Za-z]+/g, '').replace(/\s+,/g, ',').replace(/\s{2,}/g, ' ').trim();
+  return t || x.ru;
+}
+function speakAsync(text, lang){
+  return new Promise(resolve => {
+    let finished = false;
+    const done = () => { if (!finished) { finished = true; resolve(); } };
+    setTimeout(done, 9000);                                   // safety: some phones never report the end
+    const tts = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.TextToSpeech;
+    if (tts) {
+      Promise.resolve(tts.stop()).catch(() => {})
+        .then(() => tts.speak({text: text, lang: lang === 'he' ? 'he-IL' : lang === 'ru' ? 'ru-RU' : 'en-US', rate: lang === 'en' ? 0.85 : 0.9, pitch: 1.0, volume: 1.0, category: 'playback'}))
+        .catch(() => {}).then(done);
+      return;
+    }
+    if (!('speechSynthesis' in window)) { done(); return; }
+    const u = new SpeechSynthesisUtterance(text);
+    if (lang === 'he') { u.lang = 'he-IL'; u.rate = 0.9; try { const v = pickHeVoice(); if (v) u.voice = v; } catch (e) {} }
+    else if (lang === 'ru') { u.lang = 'ru-RU'; u.rate = 0.9; try { const v = pickRuVoice(); if (v) u.voice = v; } catch (e) {} }
+    else { u.lang = 'en-US'; u.rate = 0.85; try { const v = pickVoice(); if (v) u.voice = v; } catch (e) {} }
+    u.onend = u.onerror = done;
+    try { speechSynthesis.cancel(); speechSynthesis.speak(u); } catch (e) { done(); }
+  });
+}
+function cancelSpeech(){
+  try { if ('speechSynthesis' in window) speechSynthesis.cancel(); } catch (e) {}
+  const tts = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.TextToSpeech;
+  if (tts) { try { tts.stop(); } catch (e) {} }
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const player = {on: false, idx: 0, token: 0, current: -1};
+function markPlaying(i){
+  document.querySelectorAll('.lrow.playing').forEach(el => el.classList.remove('playing'));
+  const el = document.getElementById('lw' + i);
+  if (el) { el.classList.add('playing'); el.scrollIntoView({block: 'center', behavior: 'smooth'}); }
+}
+function pausePlayer(){
+  if (!player.on) return;
+  player.on = false; player.token++; cancelSpeech();
+  if (location.hash === '#learn') renderLearnBar();
+}
+function stopPlayer(){ pausePlayer(); player.idx = 0; player.current = -1; }
+async function playLoop(token){
+  const alive = () => player.on && token === player.token;
+  while (alive()) {
+    const list = learnList();
+    if (player.idx >= list.length) {                          // reached the end of the list
+      player.on = false; player.idx = 0; player.current = -1;
+      if (location.hash === '#learn') renderLearn();
+      return;
+    }
+    const i = list[player.idx], x = WORDS[i];
+    player.current = i; markPlaying(i);
+    await speakAsync(x.w, 'en');            if (!alive()) return;
+    await sleep(3000);                       if (!alive()) return;   // 3-second pause after the English word
+    const L = getSettings().playLang === 'ru' ? 'ru' : 'he';       // translation language chosen on the list screen
+    await speakAsync(L === 'ru' ? ruSpeakText(x) : heSpeakText(x), L); if (!alive()) return;
+    await sleep(1500);                       if (!alive()) return;
+    player.idx++;
+  }
+}
+
+function renderLearnBar(){
+  if (!learnList().length) { document.getElementById('barInner').innerHTML = ''; return; }
+  document.getElementById('barInner').innerHTML =
+    '<button class="primary" data-act="play">' + (player.on ? 'Pause' : (player.idx > 0 ? 'Continue' : 'Play')) + '</button>' +
+    '<button class="primary alt" data-act="learntest">Test</button>';
+}
+function renderLearn(){
+  const list = learnList();
+  const head = '<div class="top-row"><button class="back" data-act="tologbook">‹ Logbook</button>' +
+    (list.length ? '<button class="del-all' + (pending === 'clearlearn' ? ' pending' : '') + '" data-act="clearlearn">' + (pending === 'clearlearn' ? 'Tap again to clear' : 'Clear list') + '</button>' : '') +
+    '</div><h1>Words to learn</h1>';
+  if (!list.length) {
+    document.getElementById('app').innerHTML = head +
+      '<p class="empty">No words yet. Press Unknown on any word to add it here.</p>';
+    renderLearnBar();
+    return;
+  }
+  const pl = getSettings().playLang === 'ru' ? 'ru' : 'he';
+  const noVoice = ('speechSynthesis' in window) && voices.length && !(pl === 'ru' ? pickRuVoice() : pickHeVoice()) && !(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.TextToSpeech);
+  const items = list.map((i, n) => {
+    const x = WORDS[i];
+    return '<div class="lrow c' + (n % 3 + 1) + (player.current === i && player.on ? ' playing' : '') + '" id="lw' + i + '">' +
+      wordHead(x, 'small accent') + translations(x) + sentenceBlock(x, 'lsent', '') + actRow(i, '') + '</div>';
+  }).join('');
+  document.getElementById('app').innerHTML = head +
+    '<p class="date">' + list.length + (list.length === 1 ? ' word' : ' words') + ' marked Unknown</p>' +
+    '<div class="play-lang"><span class="pl-label">Play translation in</span><div class="choices">' + choice('playLang', 'he', 'Hebrew', pl) + choice('playLang', 'ru', 'Russian', pl) + '</div></div>' +
+    (noVoice ? '<p class="notice">No ' + (pl === 'ru' ? 'Russian' : 'Hebrew') + ' voice was found on this phone, so Play may skip the translation. You can add one in the phone’s text-to-speech settings.</p>' : '') +
+    '<div class="learn-list">' + items + '</div>';
+  renderLearnBar();
+}
+
+/* ---------- Test inside "Words to learn": English first, Translate shows Hebrew and Russian ---------- */
+const fc = {order: [], pos: 0, shown: false};
+function startFlashcards(){ fc.order = shuffle(learnList()); fc.pos = 0; fc.shown = false; }
+function renderLearnTest(){
+  const un = new Set(getUnknown());
+  fc.order = fc.order.filter(i => un.has(i));
+  if (!fc.order.length) startFlashcards();
+  const head = '<button class="back" data-act="tolearn">‹ Words to learn</button><h1>Test</h1>';
+  if (!fc.order.length) {
+    document.getElementById('app').innerHTML = head + '<p class="empty">There are no words to learn right now.</p>';
+    document.getElementById('barInner').innerHTML = '';
+    return;
+  }
+  if (fc.pos >= fc.order.length) fc.pos = 0;
+  const i = fc.order[fc.pos], x = WORDS[i];
+  document.getElementById('app').innerHTML = head +
+    '<p class="date">Word ' + (fc.pos + 1) + ' of ' + fc.order.length + '</p>' +
+    '<section class="card test">' + wordHead(x, 'accent') +
+      (fc.shown ? translations(x) + sentenceBlock(x, 'bubble', '') : '') +
+      actRow(i, fc.shown ? '' : '<button class="ex-btn" data-act="fcshow">Translate</button>') +
+    '</section>';
+  document.getElementById('barInner').innerHTML = '<button class="primary" data-act="fcnext">Next</button>';
 }
 
 /* ---------- Test: pick the Hebrew translation of a word from the Logbook ---------- */
@@ -801,7 +955,10 @@ function renderTest(){
 
 function route(){
   const h = location.hash;
-  if (h === '#logbook') renderLogbook();
+  if (h !== '#learn') stopPlayer();
+  if (h === '#learn') renderLearn();
+  else if (h === '#learntest') renderLearnTest();
+  else if (h === '#logbook') renderLogbook();
   else if (h === '#settings') renderSettings();
   else if (h === '#test') renderTest();
   else renderToday();
@@ -843,13 +1000,52 @@ document.addEventListener('change', ev => {
   if (lh) lh.textContent = levelHintText(s.ctx);
   const rb = document.getElementById('resetWords');
   if (rb) rb.disabled = s.repeat === 'allow';
+  if (t.name === 'playLang' && location.hash === '#learn') { const y = window.scrollY; renderLearn(); window.scrollTo(0, y); }
 });
 
 document.addEventListener('click', ev => {
   const b = ev.target.closest('[data-act]'); if (!b) return;
   const act = b.dataset.act;
   if (act === 'delete') ev.preventDefault();      // the delete button sits in the row title: do not open or close the row
-  if (act === 'audio') speak(b.dataset.text, b);
+  if (act === 'audio') { pausePlayer(); speak(b.dataset.text, b); }
+  else if (act === 'unknown') {
+    const i = +b.dataset.i, arr = getUnknown(), k = arr.indexOf(i);
+    if (k >= 0) arr.splice(k, 1); else arr.push(i);
+    saveUnknown(arr);
+    const h = location.hash, y = window.scrollY;
+    if (h === '#learn') { if (player.on) { const was = player.current; renderLearn(); if (was === i) player.idx = Math.max(0, player.idx); } else renderLearn(); window.scrollTo(0, y); }
+    else if (h === '#learntest') { fc.shown = false; renderLearnTest(); }
+    else if (h === '#logbook') rerenderLogbook();
+    else { renderToday(); window.scrollTo(0, y); }
+  }
+  else if (act === 'learn') location.hash = 'learn';
+  else if (act === 'tologbook') location.hash = 'logbook';
+  else if (act === 'tolearn') location.hash = 'learn';
+  else if (act === 'learntest') { pausePlayer(); startFlashcards(); location.hash = 'learntest'; }
+  else if (act === 'fcshow') { fc.shown = true; renderLearnTest(); }
+  else if (act === 'fcnext') {
+    fc.pos++; fc.shown = false;
+    if (fc.pos >= fc.order.length) startFlashcards();      // went through all: shuffle again
+    renderLearnTest(); window.scrollTo(0, 0);
+  }
+  else if (act === 'play') {
+    if (player.on) pausePlayer();
+    else {
+      if (player.idx >= learnList().length) player.idx = 0;
+      player.on = true; const token = ++player.token;
+      renderLearnBar(); playLoop(token);
+    }
+  }
+  else if (act === 'clearlearn') {
+    if (pending !== 'clearlearn') {
+      pending = 'clearlearn'; renderLearn();
+      setTimeout(() => { if (pending === 'clearlearn') { pending = null; if (location.hash === '#learn') renderLearn(); } }, 4000);
+    } else {
+      pending = null; stopPlayer();
+      saveUnknown([]);
+      renderLearn();
+    }
+  }
   else if (act === 'example') {
     const log = loadLog(), e = log.find(x => x.id === currentId);
     e.words[+b.dataset.idx].ex = true; saveLog(log);
@@ -910,7 +1106,7 @@ document.addEventListener('click', ev => {
   }
   else if (act === 'nextday') { store.set('dw_offset', String(getOffset() + 1)); startSession(); location.hash = 'today'; route(); }
   else if (act === 'reset') {
-    if (confirm('Erase all words and history?')) { store.del('dw_log'); store.del('dw_offset'); store.del('dw_reset'); startSession(); location.hash = 'today'; route(); }
+    if (confirm('Erase all words and history?')) { store.del('dw_log'); store.del('dw_offset'); store.del('dw_reset'); store.del('dw_unknown'); startSession(); location.hash = 'today'; route(); }
   }
 });
 
